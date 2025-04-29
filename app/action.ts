@@ -228,12 +228,12 @@ export async function UnSaveJobPost(savedJobPostId: string) {
   revalidatePath(`/job/${data.jobPostId}`);
 }
 
-export function generateUsername(): string {
-  const randomNumber = Math.floor(Math.random() * 1e12)
-    .toString()
-    .padStart(12, "0");
-  return `user${randomNumber}`;
-}
+// export function generateUsername(): string {
+//   const randomNumber = Math.floor(Math.random() * 1e12)
+//     .toString()
+//     .padStart(12, "0");
+//   return `user${randomNumber}`;
+// }
 
 export async function registerUser(data: {
   name: string;
