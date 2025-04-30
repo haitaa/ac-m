@@ -28,14 +28,16 @@ model User {
 
   SavedJobPost SavedJobPost[]
 
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  JobSeeker JobSeeker?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  JobSeeker  JobSeeker?
+  JuryMember JuryMember?
 }
 
 enum UserType {
   COMPANY
   JOB_SEEKER
+  JURY
 }
 
 model Account {
@@ -107,6 +109,8 @@ model JobSeeker {
   user       User   @relation(fields: [userId], references: [id])
   userId     String @unique
 
+  applications Application[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -130,13 +134,32 @@ model JobPost {
   Company   Company  @relation(fields: [companyId], references: [id])
   companyId String
 
+  applications Application[]
   SavedJobPost SavedJobPost[]
 }
 
-enum JobPostStatus {
-  DRAFT
-  ACTIVE
-  EXPIRED
+model JuryMember {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  evaluations JuryEvaluation[]
+}
+
+model JuryEvaluation {
+  id            String         @id @default(uuid())
+  juryMember    JuryMember     @relation(fields: [juryMemberId], references: [id], onDelete: Cascade)
+  juryMemberId  String
+  application   Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  applicationId String
+  reportUrl     String
+  decision      ReviewDecision @default(APPROVED)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([juryMemberId, applicationId])
 }
 
 model SavedJobPost {
@@ -151,4 +174,39 @@ model SavedJobPost {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, jobPostId])
+}
+
+enum JobPostStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+}
+
+enum ApplicationStatus {
+  PENDING
+  REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+enum ReviewDecision {
+  APPROVED
+  REJECTED
+}
+
+model Application {
+  id          String            @id @default(uuid())
+  jobSeeker   JobSeeker         @relation(fields: [jobSeekerId], references: [id])
+  jobSeekerId String
+  jobPost     JobPost           @relation(fields: [jobPostId], references: [id])
+  jobPostId   String
+  coverLetter String?
+  status      ApplicationStatus @default(PENDING)
+  appliedAt   DateTime          @default(now())
+
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  JuryEvaluation JuryEvaluation[]
+
+  @@unique([jobSeekerId, jobPostId])
 }

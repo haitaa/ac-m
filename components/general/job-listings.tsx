@@ -1,7 +1,6 @@
 import { prisma } from "@/app/utils/db";
 import { EmptyState } from "./empty-state";
 import { JobCard } from "./job-card";
-import Link from "next/link";
 
 async function getData() {
   const data = await prisma.jobPost.findMany({

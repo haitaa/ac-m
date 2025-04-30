@@ -1,12 +1,13 @@
+import { auth } from "@/app/utils/auth";
+import { prisma } from "@/app/utils/db";
+import { revalidatePath } from "next/cache";
 import { saveJobPost, UnSaveJobPost } from "@/app/action";
 import arcjet, {
   detectBot,
   fixedWindow,
   tokenBucket,
 } from "@/app/utils/arcjet";
-import { auth } from "@/app/utils/auth";
 import { getFlagEmoji } from "@/app/utils/countries-list";
-import { prisma } from "@/app/utils/db";
 import { benefits } from "@/app/utils/list-of-benefits";
 import { JsonToHtml } from "@/components/general/json-to-html";
 import { SaveJobButton } from "@/components/general/submit-buttons";
@@ -106,6 +107,81 @@ async function getJob(jobId: string, userId?: string) {
   return { jobData, savedJob };
 }
 
+// Apply to a job with an optional cover letter
+export async function applyToJob(jobId: string, formData: FormData) {
+  "use server";
+  // Authenticate user
+  const session = await auth();
+  if (!session?.user) {
+    throw new Error("Unauthorized");
+  }
+
+  // Fetch user and any existing JobSeeker profile
+  const userRecord = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      id: true,
+      userType: true,
+      name: true,
+      about: true,
+      JobSeeker: { select: { id: true } },
+    },
+  });
+  if (!userRecord) {
+    throw new Error("User not found.");
+  }
+  if (userRecord.userType !== "JOB_SEEKER") {
+    throw new Error("Only job seekers can apply.");
+  }
+  // If no JobSeeker profile exists, create one
+  let jobSeekerId: string;
+  if (!userRecord.JobSeeker) {
+    const newProfile = await prisma.jobSeeker.create({
+      data: {
+        userId: userRecord.id,
+        name: userRecord.name ?? "",
+        about: userRecord.about ?? "",
+        activities: {},
+        totalScore: 0,
+        resume: "",
+      },
+    });
+    jobSeekerId = newProfile.id;
+  } else {
+    jobSeekerId = userRecord.JobSeeker.id;
+  }
+
+  // Extract cover letter
+  const coverLetter = formData.get("coverLetter")?.toString();
+
+  // Prevent duplicate applications
+  const existing = await prisma.application.findUnique({
+    where: {
+      jobSeekerId_jobPostId: {
+        jobSeekerId,
+        jobPostId: jobId,
+      },
+    },
+  });
+  if (existing) {
+    // Already applied; just revalidate and return early
+    revalidatePath(`/job/${jobId}`);
+    return;
+  }
+
+  // Create application record
+  await prisma.application.create({
+    data: {
+      jobSeekerId,
+      jobPostId: jobId,
+      coverLetter: coverLetter || null,
+    },
+  });
+
+  // Revalidate the job page so UI updates
+  revalidatePath(`/job/${jobId}`);
+}
+
 type Params = Promise<{ jobId: string }>;
 export default async function JobIdPage({ params }: { params: Params }) {
   const { jobId } = await params;
@@ -187,18 +263,22 @@ export default async function JobIdPage({ params }: { params: Params }) {
         </section>
       </div>
       <div className="space-y-6">
-        <Card className="p-6">
-          <div className="space-y-4">
-            <div>
-              <h3 className="font-semibold">Apply Now</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Please let {data.Company.name} know you found this job on AC&M.
-                This helps us grow!
-              </p>
+        <form action={applyToJob.bind(null, jobId)}>
+          <Card className="p-6">
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold">Apply Now</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Please let {data.Company.name} know you found this job on
+                  AC&M. This helps us grow!
+                </p>
+              </div>
+              <Button type="submit" className="w-full">
+                Apply Now
+              </Button>
             </div>
-            <Button className="w-full">Apply Now</Button>
-          </div>
-        </Card>
+          </Card>
+        </form>
 
         {/* Job details card */}
         <Card className="p-6">
